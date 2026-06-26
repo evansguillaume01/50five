@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Tickets - Organisation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #1a1a1a; --bg-secondary: #232323; --bg-tertiary: #2a2a2a; --bg-card: #2d2d2d;
+            --text-primary: #e8e8e8; --text-secondary: #a0a0a0; --text-tertiary: #666;
+            --border-color: rgba(255,255,255,0.06);
+            --pink: #d4a5c9; --orange: #e8a87c; --green: #7ec8a3; --blue: #7da9c9; 
+            --yellow: #c9b87d; --teal: #5fb5a5; --purple: #a58ed4; --red: #c97d7d;
+            --dark-green: #5a8a6a; --light-blue: #8ab4d4;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; }
+        .container { max-width: 1800px; margin: 0 auto; padding: 0; }
+        
+        /* Upload */
+        .upload-section { padding: 3rem; }
+        .upload-zone { background: var(--bg-secondary); border: 2px dashed var(--border-color); border-radius: 12px; padding: 4rem 2rem; text-align: center; cursor: pointer; transition: all 0.2s; max-width: 600px; margin: 0 auto; }
+        .upload-zone:hover { border-color: var(--pink); }
+        .upload-zone .icon { font-size: 3rem; margin-bottom: 1rem; }
+        .upload-zone h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+        .upload-zone p { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem; }
+        .upload-zone label { display: inline-block; padding: 10px 28px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; }
+        .upload-zone input { display: none; }
+        
+        .loading { text-align: center; padding: 4rem; }
+        .spinner { width: 40px; height: 40px; border: 3px solid var(--bg-tertiary); border-top-color: var(--pink); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .dashboard { display: none; }
+        .dashboard.active { display: block; }
+        
+        /* Tabs */
+        .tabs-container { border-bottom: 1px solid var(--border-color); padding: 0 2rem; background: var(--bg-secondary); }
+        .tabs { display: flex; gap: 0; }
+        .tab { padding: 16px 28px; background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; font-size: 0.95rem; font-weight: 500; color: var(--text-secondary); transition: all 0.2s; }
+        .tab:hover { color: var(--text-primary); }
+        .tab.active { color: var(--text-primary); border-bottom-color: var(--pink); background: rgba(212,165,201,0.05); }
+        .tab-content { display: none; padding: 2rem; }
+        .tab-content.active { display: block; }
+        
+        /* Section intro */
+        .section-intro { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 2rem; line-height: 1.7; }
+        .section-intro strong { color: var(--text-primary); }
+        
+        /* KPI Summary - 3 cards top */
+        .kpi-top-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem; }
+        .kpi-top-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 10px; padding: 1.25rem 1.5rem; }
+        .kpi-top-card .value { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
+        .kpi-top-card .label { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; }
+        
+        /* Role Cards */
+        .roles-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+        .role-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 10px; padding: 1.25rem; display: flex; flex-direction: column; }
+        .role-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 0.75rem; }
+        .role-color-box { width: 40px; height: 40px; border-radius: 6px; flex-shrink: 0; }
+        .role-info h3 { font-size: 1rem; font-weight: 600; margin-bottom: 2px; }
+        .role-info .subtitle { font-size: 0.75rem; color: var(--text-secondary); }
+        
+        .role-stats { margin-bottom: 0.75rem; }
+        .role-stats .big-num { font-size: 2.2rem; font-weight: 700; line-height: 1; }
+        .role-stats .pct { font-size: 0.85rem; color: var(--text-secondary); margin-left: 8px; }
+        .role-stats .special-label { font-size: 1rem; color: var(--purple); font-weight: 600; margin-bottom: 0.25rem; }
+        
+        .role-progress { height: 4px; background: var(--bg-tertiary); border-radius: 2px; margin-bottom: 1rem; overflow: hidden; }
+        .role-progress .fill { height: 100%; border-radius: 2px; }
+        
+        .role-categories { flex: 1; display: flex; flex-direction: column; gap: 4px; margin-bottom: 1rem; }
+        .cat-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 6px; font-size: 0.8rem; }
+        .cat-row .name { flex: 1; }
+        .cat-row .count { font-weight: 600; margin-left: 12px; }
+        
+        .role-tasks { flex: 1; margin-bottom: 1rem; }
+        .role-tasks .task { font-size: 0.8rem; color: var(--text-secondary); padding: 4px 0; padding-left: 12px; position: relative; }
+        .role-tasks .task::before { content: ''; position: absolute; left: 0; top: 50%; width: 4px; height: 4px; background: var(--text-tertiary); border-radius: 50%; transform: translateY(-50%); }
+        
+        .role-description { font-size: 0.75rem; color: var(--text-tertiary); line-height: 1.6; padding-top: 0.75rem; border-top: 1px solid var(--border-color); }
+        
+        .section-note { font-size: 0.8rem; color: var(--text-secondary); margin-top: 2rem; padding: 1rem; background: var(--bg-secondary); border-radius: 8px; border-left: 3px solid var(--purple); }
+        
+        /* Simulator */
+        .simulator-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; gap: 2rem; }
+        .simulator-header .intro { flex: 1; }
+        .btn { padding: 10px 20px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; font-size: 0.85rem; color: var(--text-primary); transition: all 0.2s; }
+        .btn:hover { background: var(--bg-card); }
+        
+        .simulator-scroll { overflow-x: auto; padding-bottom: 1rem; }
+        .simulator-grid { display: flex; gap: 12px; min-width: max-content; }
+        .sim-column { width: 260px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 10px; display: flex; flex-direction: column; flex-shrink: 0; }
+        .sim-column-header { padding: 1rem; border-bottom: 1px solid var(--border-color); }
+        .sim-column-header .title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
+        .sim-column-header .dot { width: 10px; height: 10px; border-radius: 50%; }
+        .sim-column-header .stats { font-size: 0.8rem; color: var(--text-secondary); }
+        .sim-column-header .progress-bar { height: 3px; background: var(--bg-tertiary); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+        .sim-column-header .progress-fill { height: 100%; border-radius: 2px; }
+        
+        .sim-column-body { padding: 8px; flex: 1; min-height: 150px; transition: background 0.2s; }
+        .sim-column-body.drag-over { background: rgba(212,165,201,0.08); }
+        
+        .drag-item { padding: 10px 12px; background: var(--bg-tertiary); border-radius: 6px; margin-bottom: 6px; cursor: grab; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; border-left: 3px solid; transition: all 0.15s; }
+        .drag-item:hover { background: #363636; }
+        .drag-item.dragging { opacity: 0.4; cursor: grabbing; }
+        .drag-item .name { flex: 1; line-height: 1.4; }
+        .drag-item .count { font-weight: 600; margin-left: 10px; flex-shrink: 0; }
+        
+        .empty-col { color: var(--text-tertiary); font-size: 0.8rem; text-align: center; padding: 2rem 1rem; }
+        
+        /* Charts */
+        .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
+        .chart-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 10px; padding: 1.5rem; }
+        .chart-card h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; }
+        .chart-wrapper { height: 300px; position: relative; }
+        
+        /* Overview */
+        .overview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+        .overview-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem; }
+        .overview-card .label { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+        .overview-card .value { font-size: 1.6rem; font-weight: 600; }
+        
+        @media (max-width: 1200px) {
+            .roles-grid { grid-template-columns: repeat(2, 1fr); }
+            .kpi-top-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 800px) {
+            .roles-grid { grid-template-columns: 1fr; }
+            .charts-grid { grid-template-columns: 1fr; }
+            .overview-grid { grid-template-columns: repeat(2, 1fr); }
+            .tab { padding: 12px 16px; font-size: 0.85rem; }
+        }
+        @media (max-width: 500px) {
+            .tabs-container { padding: 0 1rem; }
+            .tab-content { padding: 1rem; }
+            .overview-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="uploadSection" class="upload-section">
+            <div class="upload-zone" id="dropZone">
+                <div class="icon">📁</div>
+                <h3>Glissez votre fichier ici</h3>
+                <p>ou cliquez pour sélectionner (CSV, XLSX)</p>
+                <label for="fileInput">Choisir un fichier</label>
+                <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+            </div>
+        </div>
+
+        <div id="loadingSection" style="display:none;">
+            <div class="loading"><div class="spinner"></div><p>Analyse des données...</p></div>
+        </div>
+
+        <div id="dashboard" class="dashboard">
+            <div class="tabs-container">
+                <div class="tabs">
+                    <button class="tab active" data-tab="typologie">Typologie</button>
+                    <button class="tab" data-tab="demandeurs">Demandeurs</button>
+                    <button class="tab" data-tab="organisation">Organisation</button>
+                    <button class="tab" data-tab="simulateur">Simulateur</button>
+                    <button class="tab" data-tab="evolution">Évolution</button>
+                </div>
+            </div>
+
+            <!-- Typologie -->
+            <div id="tab-typologie" class="tab-content active">
+                <div class="overview-grid">
+                    <div class="overview-card"><div class="label">Total tickets</div><div class="value" id="totalTickets">-</div></div>
+                    <div class="overview-card"><div class="label">Ouverts</div><div class="value" style="color:var(--orange)" id="openTickets">-</div></div>
+                    <div class="overview-card"><div class="label">Clôturés</div><div class="value" style="color:var(--green)" id="closedTickets">-</div></div>
+                    <div class="overview-card"><div class="label">Taux clôture</div><div class="value" style="color:var(--pink)" id="closureRate">-</div></div>
+                </div>
+                <div class="charts-grid">
+                    <div class="chart-card"><h3>Répartition par catégorie</h3><div class="chart-wrapper"><canvas id="catChart"></canvas></div></div>
+                    <div class="chart-card"><h3>Répartition par sous-catégorie (Top 12)</h3><div class="chart-wrapper"><canvas id="subCatChart"></canvas></div></div>
+                </div>
+            </div>
+
+            <!-- Demandeurs -->
+            <div id="tab-demandeurs" class="tab-content">
+                <div class="charts-grid">
+                    <div class="chart-card"><h3>Top 15 demandeurs</h3><div class="chart-wrapper" style="height:400px;"><canvas id="topReportersChart"></canvas></div></div>
+                    <div class="chart-card"><h3>Répartition par type de demandeur</h3><div class="chart-wrapper"><canvas id="reporterTypeChart"></canvas></div></div>
+                </div>
+            </div>
+
+            <!-- Organisation -->
+            <div id="tab-organisation" class="tab-content">
+                <p class="section-intro">
+                    <strong>Organisation cible — <span id="roleCount">9</span> personnes.</strong> 
+                    Le Support Lead oriente et résout la 1<sup>re</sup> ligne ; chacun traite sa famille de tickets. 
+                    Les volumes sont recalculés à chaque import.
+                </p>
+                <div class="kpi-top-grid" id="kpiTopGrid"></div>
+                <div class="roles-grid" id="rolesGrid"></div>
+                <div class="section-note" id="sectionNote"></div>
+            </div>
+
+            <!-- Simulateur -->
+            <div id="tab-simulateur" class="tab-content">
+                <div class="simulator-header">
+                    <p class="section-intro intro" style="margin-bottom:0;">
+                        Glissez-déposez chaque catégorie d'une fonction à l'autre pour tester vos hypothèses d'organisation. 
+                        Les charges se recalculent en direct. <strong>Bac à sable</strong> : ces déplacements n'affectent pas l'onglet Organisation.
+                        <em style="color:var(--text-tertiary);">(Glisser-déposer à la souris.)</em>
+                    </p>
+                    <button class="btn" id="resetSimBtn">Réinitialiser</button>
+                </div>
+                <div class="simulator-scroll">
+                    <div class="simulator-grid" id="simulatorGrid"></div>
+                </div>
+            </div>
+
+            <!-- Évolution -->
+            <div id="tab-evolution" class="tab-content">
+                <div class="charts-grid">
+                    <div class="chart-card"><h3>Nouveaux tickets par semaine</h3><div class="chart-wrapper"><canvas id="trendChart"></canvas></div></div>
+                    <div class="chart-card"><h3>Répartition par statut (tickets ouverts)</h3><div class="chart-wrapper"><canvas id="statusChart"></canvas></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        // Column mapping
+        const colMap = {
+            'Étape': ['Étape', 'Stage', 'Status'],
+            'Catégorie': ['Catégorie', 'Category'],
+            'Sous-catégorie': ['Sous-catégorie', 'Subcategory'],
+            'Créé le': ['Créé le', 'Created on', 'Created'],
+            'Demandeur': ['Demandeur', 'Reporter', 'Delivery contact', 'Contact']
+        };
+        const closedStatuses = ['Closed', 'closed_x', 'Fermé', 'Résolu', 'Done'];
+        
+        // Organization structure with all 9 roles
+        const orgConfig = [
+            {
+                id: 1, name: 'Support Lead', subtitle: 'Tri, assignation & 1re ligne', color: '#d4a5c9',
+                description: 'Première ligne : trie et assigne tous les tickets, répond aux questions simples.',
+                categories: ['Charging Card', 'Questions about using the charging station/card', 'Other questions']
+            },
+            {
+                id: 2, name: 'Électricien', subtitle: 'Pannes de bornes', color: '#e8a87c',
+                description: 'Résout les pannes électriques et matérielles des bornes.',
+                categories: ['Repair/ Malfunction']
+            },
+            {
+                id: 3, name: 'Technicien terrain', subtitle: '~50 % sur les tickets', color: '#7ec8a3',
+                description: 'Débogue les bornes sur site et suit la maintenance ; consacre environ la moitié de son temps aux tickets.',
+                categories: ['Maintenance']
+            },
+            {
+                id: 4, name: 'Expert ingénieur', subtitle: 'Escalade & B2B complexe', color: '#7da9c9',
+                isSpecial: true, specialLabel: 'Escalade / L3',
+                tasks: ['Dossiers B2B techniques complexes', 'Bornes hors garantie / multi-sites', 'Escalades électricien & technicien', 'Appui technique Premium'],
+                description: 'Backstop technique : reprend les cas B2B complexes et les escalades des autres techniciens.',
+                categories: []
+            },
+            {
+                id: 5, name: 'Chargée d\'administration', subtitle: 'Factures & recouvrement B2B', color: '#c9b87d',
+                description: 'Traite les tickets orientés factures et le recouvrement B2B.',
+                categories: ['Invoices']
+            },
+            {
+                id: 6, name: 'Lead service client', subtitle: 'Relation client commerciale', color: '#8ab4d4',
+                description: 'Pilote la relation client : dossiers, contrats et réclamations.',
+                categories: ['Charging management/ Subscriptions']
+            },
+            {
+                id: 7, name: 'Directeur commercial', subtitle: 'Vente & développement', color: '#5fb5a5',
+                description: 'Commercial / direction : devis et développement de comptes.',
+                categories: ['Offer']
+            },
+            {
+                id: 8, name: 'Installation (B2B + B2B2C)', subtitle: '2 chargés · + accès & roaming', color: '#5a8a6a',
+                description: 'Deux chargés (B2B et B2B2C). Pour rééquilibrer la charge, ils prennent aussi les accès plateforme/app et le roaming. Volume mutualisé (~50/50).',
+                categories: ['Installation', 'Planning']
+            }
+        ];
+
+        let rawData = [], openData = [], colMapping = {}, charts = {};
+        let simRoles = [];
+
+        // DOM
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const uploadSection = document.getElementById('uploadSection');
+        const loadingSection = document.getElementById('loadingSection');
+        const dashboard = document.getElementById('dashboard');
+
+        // Tabs
+        document.querySelectorAll('.tab').forEach(t => {
+            t.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+                t.classList.add('active');
+                document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+                if (t.dataset.tab === 'simulateur') initSimulator();
+            });
+        });
+
+        // Upload
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#d4a5c9'; });
+        dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = ''; });
+        dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.style.borderColor = ''; if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+        document.getElementById('resetSimBtn').addEventListener('click', initSimulator);
+
+        function findCol(row, key) {
+            const opts = colMap[key] || [key];
+            for (const c of opts) if (row && row.hasOwnProperty(c)) return c;
+            return null;
+        }
+
+        function handleFile(file) {
+            uploadSection.style.display = 'none';
+            loadingSection.style.display = 'block';
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (ext === 'csv') {
+                Papa.parse(file, { header: true, skipEmptyLines: true, complete: r => processData(r.data), error: () => location.reload() });
+            } else {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    try {
+                        const wb = XLSX.read(e.target.result, { type: 'array' });
+                        processData(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]));
+                    } catch { location.reload(); }
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        }
+
+        function processData(rows) {
+            rawData = rows;
+            const sample = rows[0] || {};
+            Object.keys(colMap).forEach(k => { colMapping[k] = findCol(sample, k); });
+            
+            const stageCol = colMapping['Étape'];
+            openData = rows.filter(r => {
+                const s = stageCol ? r[stageCol] : '';
+                return !closedStatuses.some(c => c.toLowerCase() === String(s).toLowerCase());
+            });
+
+            updateAll();
+            loadingSection.style.display = 'none';
+            dashboard.classList.add('active');
+        }
+
+        function updateAll() {
+            updateTypologie();
+            updateDemandeurs();
+            updateOrganisation();
+            updateEvolution();
+        }
+
+        function updateTypologie() {
+            const total = rawData.length;
+            const stageCol = colMapping['Étape'];
+            const closed = rawData.filter(r => closedStatuses.some(s => s.toLowerCase() === String(r[stageCol] || '').toLowerCase())).length;
+            
+            document.getElementById('totalTickets').textContent = total.toLocaleString('fr-FR');
+            document.getElementById('openTickets').textContent = (total - closed).toLocaleString('fr-FR');
+            document.getElementById('closedTickets').textContent = closed.toLocaleString('fr-FR');
+            document.getElementById('closureRate').textContent = ((closed / total) * 100).toFixed(1) + ' %';
+
+            // Category chart
+            const catCol = colMapping['Catégorie'];
+            if (catCol) {
+                const cats = {};
+                openData.forEach(r => { const c = r[catCol] || 'Non défini'; cats[c] = (cats[c] || 0) + 1; });
+                const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+                
+                if (charts.cat) charts.cat.destroy();
+                charts.cat = new Chart(document.getElementById('catChart').getContext('2d'), {
+                    type: 'doughnut',
+                    data: { labels: sorted.map(s => s[0]), datasets: [{ data: sorted.map(s => s[1]), backgroundColor: ['#d4a5c9', '#e8a87c', '#7ec8a3', '#7da9c9', '#c9b87d', '#5fb5a5', '#a58ed4', '#c97d7d'] }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#a0a0a0', boxWidth: 12, padding: 10 } } } }
+                });
+            }
+
+            // Subcategory chart
+            const subCol = colMapping['Sous-catégorie'];
+            if (subCol) {
+                const subs = {};
+                openData.forEach(r => { const s = r[subCol] || 'Non défini'; subs[s] = (subs[s] || 0) + 1; });
+                const sorted = Object.entries(subs).sort((a, b) => b[1] - a[1]).slice(0, 12);
+                
+                if (charts.subCat) charts.subCat.destroy();
+                charts.subCat = new Chart(document.getElementById('subCatChart').getContext('2d'), {
+                    type: 'bar',
+                    data: { labels: sorted.map(s => s[0].substring(0, 30)), datasets: [{ data: sorted.map(s => s[1]), backgroundColor: '#d4a5c9' }] },
+                    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#a0a0a0' }, grid: { color: '#333' } }, y: { ticks: { color: '#a0a0a0' }, grid: { display: false } } } }
+                });
+            }
+        }
+
+        function updateDemandeurs() {
+            const demCol = colMapping['Demandeur'];
+            if (!demCol) return;
+
+            const reporters = {};
+            openData.forEach(r => { const d = r[demCol] || 'Non défini'; reporters[d] = (reporters[d] || 0) + 1; });
+            const sorted = Object.entries(reporters).sort((a, b) => b[1] - a[1]).slice(0, 15);
+
+            if (charts.topReporters) charts.topReporters.destroy();
+            charts.topReporters = new Chart(document.getElementById('topReportersChart').getContext('2d'), {
+                type: 'bar',
+                data: { labels: sorted.map(s => s[0].substring(0, 25)), datasets: [{ data: sorted.map(s => s[1]), backgroundColor: '#7ec8a3' }] },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#a0a0a0' }, grid: { color: '#333' } }, y: { ticks: { color: '#a0a0a0' }, grid: { display: false } } } }
+            });
+        }
+
+        function updateOrganisation() {
+            const catCol = colMapping['Catégorie'];
+            const subCol = colMapping['Sous-catégorie'];
+            const totalOpen = openData.length;
+
+            // Calculate stats for each role
+            const roleStats = orgConfig.map(role => {
+                const catCounts = {};
+                let count = 0;
+
+                if (catCol && role.categories) {
+                    role.categories.forEach(cat => {
+                        const matches = openData.filter(r => {
+                            const val = String(r[catCol] || '').toLowerCase();
+                            return val.includes(cat.toLowerCase()) || cat.toLowerCase().includes(val);
+                        });
+                        catCounts[cat] = matches.length;
+                        count += matches.length;
+                    });
+                }
+
+                return { ...role, count, catCounts, pct: totalOpen > 0 ? ((count / totalOpen) * 100).toFixed(0) : 0 };
+            });
+
+            // Top KPIs
+            const maxRole = roleStats.reduce((a, b) => (a.count > b.count ? a : b), { count: 0, name: '-' });
+            const techRole = roleStats.find(r => r.name.includes('Technicien')) || { count: 0 };
+            
+            document.getElementById('kpiTopGrid').innerHTML = `
+                <div class="kpi-top-card">
+                    <div class="value">${maxRole.count} · ${maxRole.pct} %</div>
+                    <div class="label">${maxRole.name} — charge la plus forte</div>
+                </div>
+                <div class="kpi-top-card">
+                    <div class="value">${techRole.count} tickets</div>
+                    <div class="label">Technicien à ~50 % du temps — tension sur les bornes offline</div>
+                </div>
+                <div class="kpi-top-card">
+                    <div class="value">${totalOpen} · 100 %</div>
+                    <div class="label">Total tickets ouverts à répartir</div>
+                </div>
+            `;
+
+            // Role cards
+            const maxCount = Math.max(...roleStats.map(r => r.count), 1);
+            document.getElementById('rolesGrid').innerHTML = roleStats.map(role => {
+                let contentHtml = '';
+                
+                if (role.isSpecial) {
+                    contentHtml = `
+                        <div class="role-stats"><div class="special-label">${role.specialLabel}</div></div>
+                        <div class="role-tasks">${(role.tasks || []).map(t => `<div class="task">${t}</div>`).join('')}</div>
+                    `;
+                } else {
+                    const catsHtml = Object.entries(role.catCounts || {})
+                        .filter(([_, c]) => c > 0)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([name, count]) => {
+                            const catColor = adjustColor(role.color, 0.6);
+                            return `<div class="cat-row" style="background:${catColor}"><span class="name">${name}</span><span class="count">${count}</span></div>`;
+                        }).join('');
+                    
+                    contentHtml = `
+                        <div class="role-stats">
+                            <span class="big-num">${role.count}</span>
+                            <span class="pct">${role.pct} % du volume</span>
+                        </div>
+                        <div class="role-progress"><div class="fill" style="width:${(role.count / maxCount) * 100}%;background:${role.color}"></div></div>
+                        <div class="role-categories">${catsHtml || '<div style="color:var(--text-tertiary);font-size:0.8rem;">Aucune catégorie assignée</div>'}</div>
+                    `;
+                }
+
+                return `
+                <div class="role-card">
+                    <div class="role-header">
+                        <div class="role-color-box" style="background:${role.color}"></div>
+                        <div class="role-info">
+                            <h3>${role.name}</h3>
+                            <div class="subtitle">${role.subtitle}</div>
+                        </div>
+                    </div>
+                    ${contentHtml}
+                    <div class="role-description">${role.description}</div>
+                </div>`;
+            }).join('');
+
+            document.getElementById('sectionNote').innerHTML = `
+                <strong>Premium B2B :</strong> surcouche pilotée par le Support Lead (chrono SLA), traitée par l'Expert ingénieur (technique) et le Lead service client (relation).
+            `;
+        }
+
+        function adjustColor(hex, opacity) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r},${g},${b},${opacity})`;
+        }
+
+        function initSimulator() {
+            const catCol = colMapping['Catégorie'];
+            
+            // Deep copy org config
+            simRoles = JSON.parse(JSON.stringify(orgConfig));
+            
+            // Calculate counts
+            simRoles.forEach(role => {
+                role.catCounts = {};
+                role.count = 0;
+                if (catCol && role.categories) {
+                    role.categories.forEach(cat => {
+                        const matches = openData.filter(r => {
+                            const val = String(r[catCol] || '').toLowerCase();
+                            return val.includes(cat.toLowerCase()) || cat.toLowerCase().includes(val);
+                        });
+                        role.catCounts[cat] = matches.length;
+                        role.count += matches.length;
+                    });
+                }
+                role.pct = openData.length > 0 ? ((role.count / openData.length) * 100).toFixed(0) : 0;
+            });
+
+            renderSimulator();
+        }
+
+        function renderSimulator() {
+            const maxCount = Math.max(...simRoles.map(r => r.count), 1);
+            
+            document.getElementById('simulatorGrid').innerHTML = simRoles.filter(r => !r.isSpecial).map(role => {
+                const progressColor = role.count > maxCount * 0.7 ? '#c97d7d' : role.count > maxCount * 0.3 ? '#e8a87c' : '#7ec8a3';
+                
+                const itemsHtml = (role.categories || []).map(cat => {
+                    const count = role.catCounts[cat] || 0;
+                    return `<div class="drag-item" draggable="true" data-cat="${cat}" data-role="${role.id}" style="border-left-color:${role.color}">
+                        <span class="name">${cat}</span>
+                        <span class="count">${count}</span>
+                    </div>`;
+                }).join('');
+
+                return `
+                <div class="sim-column" data-role="${role.id}">
+                    <div class="sim-column-header">
+                        <div class="title"><span class="dot" style="background:${role.color}"></span>${role.name}</div>
+                        <div class="stats">${role.count} tickets · ${role.pct} %</div>
+                        <div class="progress-bar"><div class="progress-fill" style="width:${(role.count / maxCount) * 100}%;background:${progressColor}"></div></div>
+                    </div>
+                    <div class="sim-column-body" data-role="${role.id}">
+                        ${itemsHtml || '<div class="empty-col">—</div>'}
+                    </div>
+                </div>`;
+            }).join('');
+
+            // Add drag events
+            document.querySelectorAll('.drag-item').forEach(el => {
+                el.addEventListener('dragstart', onDragStart);
+                el.addEventListener('dragend', onDragEnd);
+            });
+            document.querySelectorAll('.sim-column-body').forEach(el => {
+                el.addEventListener('dragover', onDragOver);
+                el.addEventListener('dragleave', onDragLeave);
+                el.addEventListener('drop', onDrop);
+            });
+        }
+
+        let dragEl = null;
+        function onDragStart(e) { dragEl = e.target; e.target.classList.add('dragging'); }
+        function onDragEnd(e) { e.target.classList.remove('dragging'); document.querySelectorAll('.sim-column-body').forEach(el => el.classList.remove('drag-over')); }
+        function onDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+        function onDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+        function onDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('drag-over');
+            
+            const targetId = parseInt(e.currentTarget.dataset.role);
+            const sourceId = parseInt(dragEl.dataset.role);
+            const cat = dragEl.dataset.cat;
+            
+            if (targetId === sourceId) return;
+
+            const source = simRoles.find(r => r.id === sourceId);
+            const target = simRoles.find(r => r.id === targetId);
+            
+            // Move category
+            source.categories = source.categories.filter(c => c !== cat);
+            target.categories.push(cat);
+            
+            // Transfer count
+            const count = source.catCounts[cat] || 0;
+            delete source.catCounts[cat];
+            target.catCounts[cat] = count;
+            
+            // Recalculate totals
+            source.count = Object.values(source.catCounts).reduce((a, b) => a + b, 0);
+            target.count = Object.values(target.catCounts).reduce((a, b) => a + b, 0);
+            source.pct = openData.length > 0 ? ((source.count / openData.length) * 100).toFixed(0) : 0;
+            target.pct = openData.length > 0 ? ((target.count / openData.length) * 100).toFixed(0) : 0;
+
+            renderSimulator();
+        }
+
+        function updateEvolution() {
+            const createdCol = colMapping['Créé le'];
+            const stageCol = colMapping['Étape'];
+
+            if (createdCol) {
+                const today = new Date();
+                const weeks = [];
+                for (let i = 7; i >= 0; i--) {
+                    const d = new Date(today); d.setDate(d.getDate() - i * 7);
+                    const start = new Date(d); start.setDate(d.getDate() - d.getDay() + 1); start.setHours(0, 0, 0, 0);
+                    const end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23, 59, 59, 999);
+                    weeks.push({ label: start.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }), start, end, count: 0 });
+                }
+                rawData.forEach(r => {
+                    let d = r[createdCol];
+                    if (typeof d === 'number') d = new Date((d - 25569) * 86400 * 1000);
+                    else d = new Date(d);
+                    weeks.forEach(w => { if (d >= w.start && d <= w.end) w.count++; });
+                });
+
+                if (charts.trend) charts.trend.destroy();
+                charts.trend = new Chart(document.getElementById('trendChart').getContext('2d'), {
+                    type: 'line',
+                    data: { labels: weeks.map(w => w.label), datasets: [{ data: weeks.map(w => w.count), borderColor: '#d4a5c9', backgroundColor: 'rgba(212,165,201,0.1)', fill: true, tension: 0.3 }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#a0a0a0' }, grid: { color: '#333' } }, x: { ticks: { color: '#a0a0a0' }, grid: { display: false } } } }
+                });
+            }
+
+            if (stageCol) {
+                const stages = {};
+                openData.forEach(r => { const s = r[stageCol] || 'Non défini'; stages[s] = (stages[s] || 0) + 1; });
+                const sorted = Object.entries(stages).sort((a, b) => b[1] - a[1]);
+
+                if (charts.status) charts.status.destroy();
+                charts.status = new Chart(document.getElementById('statusChart').getContext('2d'), {
+                    type: 'bar',
+                    data: { labels: sorted.map(s => s[0]), datasets: [{ data: sorted.map(s => s[1]), backgroundColor: ['#7ec8a3', '#7da9c9', '#e8a87c', '#c9b87d', '#d4a5c9', '#5fb5a5'] }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#a0a0a0' }, grid: { color: '#333' } }, x: { ticks: { color: '#a0a0a0' }, grid: { display: false } } } }
+                });
+            }
+        }
+    })();
+    </script>
+</body>
+</html>
